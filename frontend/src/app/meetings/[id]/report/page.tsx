@@ -10,6 +10,267 @@ import {
 import { Sidebar } from '@/components/Sidebar';
 import { meetingsApi } from '@/lib/api';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FULL TRANSCRIPT VIEWER COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SPEAKER_COLORS = [
+  '#34a853', // green
+  '#4285f4', // blue
+  '#fbbc04', // yellow
+  '#ea4335', // red
+  '#9c27b0', // purple
+  '#00bcd4', // cyan
+  '#ff7043', // deep orange
+  '#26a69a', // teal
+];
+
+interface TranscriptSegment {
+  time: string;
+  speaker: string;
+  text: string;
+}
+
+function parseTranscriptSegments(fullText: string): TranscriptSegment[] {
+  const lines = fullText.split('\n');
+  const segments: TranscriptSegment[] = [];
+  lines.forEach((line) => {
+    const match = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+(.+?):\s+(.+)$/);
+    if (match) {
+      segments.push({ time: match[1], speaker: match[2].trim(), text: match[3].trim() });
+    }
+  });
+  return segments;
+}
+
+function FullTranscriptViewer({ transcriptText }: { transcriptText: string }) {
+  const segments = parseTranscriptSegments(transcriptText);
+  const speakers = [...new Set(segments.map((s) => s.speaker))];
+  const speakerIdx: Record<string, number> = {};
+  speakers.forEach((sp, i) => { speakerIdx[sp] = i; });
+
+  const downloadTranscript = () => {
+    const blob = new Blob([transcriptText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'transcript.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (!segments.length) {
+    return (
+      <div className="transcript-viewer">
+        <div className="tv-header">
+          <span className="tv-title">View Full Transcript</span>
+        </div>
+        <p className="tv-empty">No transcript segments found.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="transcript-viewer">
+      {/* Header */}
+      <div className="tv-header">
+        <span className="tv-title">View Full Transcript</span>
+        <div className="tv-header-right">
+          {/* Speaker legend */}
+          <div className="tv-legend">
+            <span className="tv-legend-label">SPEAKERS</span>
+            {speakers.map((sp, i) => (
+              <span key={sp} className="tv-legend-item">
+                <span
+                  className="tv-legend-dot"
+                  style={{ backgroundColor: SPEAKER_COLORS[i % SPEAKER_COLORS.length] }}
+                />
+                <span
+                  className="tv-legend-name"
+                  style={{ color: SPEAKER_COLORS[i % SPEAKER_COLORS.length] }}
+                >
+                  {sp}
+                </span>
+              </span>
+            ))}
+          </div>
+          {/* Download button */}
+          <button className="tv-download-btn" onClick={downloadTranscript}>
+            <Download className="w-3.5 h-3.5" />
+            Download Transcript
+          </button>
+        </div>
+      </div>
+
+      {/* Segments */}
+      <div className="tv-body">
+        {segments.map((seg, idx) => {
+          const ci = speakerIdx[seg.speaker] % SPEAKER_COLORS.length;
+          const color = SPEAKER_COLORS[ci];
+          return (
+            <div key={idx}>
+              <div
+                className="tv-row"
+                style={{ borderLeftColor: color }}
+              >
+                <span className="tv-time">{seg.time}</span>
+                <div className="tv-content">
+                  <span className="tv-speaker" style={{ color }}>
+                    {seg.speaker}:
+                  </span>
+                  <span className="tv-text">{seg.text}</span>
+                </div>
+              </div>
+              {idx < segments.length - 1 && <div className="tv-divider" />}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Inline styles scoped to this component */}
+      <style>{`
+        .transcript-viewer {
+          background: #111214;
+          border-radius: 12px;
+          overflow: hidden;
+          font-family: 'Google Sans', 'Segoe UI', sans-serif;
+        }
+        .tv-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 12px;
+          padding: 14px 20px;
+          border-bottom: 1px solid #2a2b2e;
+        }
+        .tv-title {
+          font-size: 15px;
+          font-weight: 600;
+          color: #e8eaed;
+        }
+        .tv-header-right {
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          flex-wrap: wrap;
+        }
+        .tv-legend {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          flex-wrap: wrap;
+        }
+        .tv-legend-label {
+          font-size: 11px;
+          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: #9aa0a6;
+        }
+        .tv-legend-item {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        }
+        .tv-legend-dot {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          display: inline-block;
+          flex-shrink: 0;
+        }
+        .tv-legend-name {
+          font-size: 13px;
+          font-weight: 500;
+        }
+        .tv-download-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: transparent;
+          border: 1px solid #3c4043;
+          color: #9aa0a6;
+          border-radius: 8px;
+          padding: 6px 14px;
+          font-size: 12px;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          white-space: nowrap;
+        }
+        .tv-download-btn:hover {
+          border-color: #5f6368;
+          color: #e8eaed;
+          background: #1e2124;
+        }
+        .tv-body {
+          max-height: 480px;
+          overflow-y: auto;
+          padding: 6px 0;
+        }
+        .tv-body::-webkit-scrollbar {
+          width: 6px;
+        }
+        .tv-body::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .tv-body::-webkit-scrollbar-thumb {
+          background: #3c4043;
+          border-radius: 3px;
+        }
+        .tv-row {
+          display: flex;
+          align-items: flex-start;
+          gap: 0;
+          padding: 10px 20px;
+          border-left: 3px solid transparent;
+          transition: background 0.1s ease;
+        }
+        .tv-row:hover {
+          background: #1a1b1e;
+        }
+        .tv-time {
+          font-size: 12px;
+          color: #5f6368;
+          font-variant-numeric: tabular-nums;
+          width: 76px;
+          flex-shrink: 0;
+          padding-top: 1px;
+          font-family: 'Roboto Mono', 'Courier New', monospace;
+        }
+        .tv-content {
+          flex: 1;
+          min-width: 0;
+        }
+        .tv-speaker {
+          font-size: 13px;
+          font-weight: 600;
+          margin-right: 6px;
+        }
+        .tv-text {
+          font-size: 13px;
+          color: #bdc1c6;
+          line-height: 1.6;
+        }
+        .tv-divider {
+          height: 1px;
+          background: #2a2b2e;
+          margin: 0 20px;
+        }
+        .tv-empty {
+          padding: 24px 20px;
+          font-size: 13px;
+          color: #5f6368;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN REPORT PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function ReportPage() {
   const params = useParams();
   const meetingId = Number(params.id);
@@ -44,10 +305,16 @@ export default function ReportPage() {
     return () => clearInterval(t);
   }, [polling, meetingId]);
 
-  if (loading) return <div className="flex"><Sidebar /><main className="flex-1 p-8">Loading report...</main></div>;
+  if (loading) return (
+    <div className="flex">
+      <Sidebar />
+      <main className="flex-1 p-8">Loading report...</main>
+    </div>
+  );
 
   if (!report) return (
-    <div className="flex"><Sidebar />
+    <div className="flex">
+      <Sidebar />
       <main className="flex-1 p-8">
         <div className="card text-center py-16">
           <div className="inline-block w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -66,8 +333,6 @@ export default function ReportPage() {
   const absent = Math.max(0, totalInvited - present);
   const attendancePct = totalInvited > 0 ? Math.min(100, Math.round((present / totalInvited) * 100)) : 0;
 
-  const SPEAKER_COLORS = ['#22c55e','#3b82f6','#f59e0b','#ec4899','#8b5cf6','#14b8a6','#f97316','#06b6d4'];
-
   // Calculate join/leave time per speaker from transcript segments
   const speakerTimes: Record<string, { joinSec: number; leaveSec: number }> = {};
   if (report.full_transcript_text) {
@@ -84,7 +349,6 @@ export default function ReportPage() {
     });
   }
 
-  // Convert relative seconds to actual clock time using meeting start
   const meetingStartStr = meeting?.actual_start_time || meeting?.meeting_date + 'T' + (meeting?.start_time || '00:00:00');
   const meetingStartMs = new Date(meetingStartStr).getTime();
 
@@ -156,10 +420,10 @@ export default function ReportPage() {
         {/* Stats Row */}
         <div className="grid grid-cols-5 gap-4 mb-6">
           {[
-            { icon: Users,       label: 'Total Invited', value: totalInvited, color: 'text-text' },
-            { icon: CheckCircle, label: 'Present',       value: present,      color: 'text-accent' },
-            { icon: AlertCircle, label: 'Absent',        value: absent,       color: absent > 0 ? 'text-red-400' : 'text-text-dim' },
-            { icon: TrendingUp,  label: 'Attendance',    value: `${attendancePct}%`, color: 'text-accent' },
+            { icon: Users,       label: 'Total Invited', value: totalInvited,               color: 'text-text' },
+            { icon: CheckCircle, label: 'Present',       value: present,                    color: 'text-accent' },
+            { icon: AlertCircle, label: 'Absent',        value: absent,                     color: absent > 0 ? 'text-red-400' : 'text-text-dim' },
+            { icon: TrendingUp,  label: 'Attendance',    value: `${attendancePct}%`,         color: 'text-accent' },
             { icon: TrendingUp,  label: 'Engagement',    value: `${report.engagement_score || 0}%`, color: 'text-orange-400' },
           ].map(({ icon: Icon, label, value, color }) => (
             <div key={label} className="card text-center">
@@ -171,7 +435,7 @@ export default function ReportPage() {
           ))}
         </div>
 
-        {/* 1. AI Summary — full width */}
+        {/* 1. AI Summary */}
         <div className="card mb-5">
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-accent" /> AI Summary
@@ -191,7 +455,7 @@ export default function ReportPage() {
           )}
         </div>
 
-        {/* 2. Speaker Contribution — full width */}
+        {/* 2. Speaker Contribution */}
         <div className="card mb-5">
           <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
             <Mic className="w-4 h-4 text-accent" /> Speaker Contribution
@@ -221,7 +485,7 @@ export default function ReportPage() {
           )}
         </div>
 
-        {/* 3. Participants Overview table */}
+        {/* 3. Participants Overview */}
         <div className="card mb-5">
           <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
             <Users className="w-4 h-4 text-accent" /> Participants Overview
@@ -393,14 +657,11 @@ export default function ReportPage() {
           </div>
         )}
 
-        {/* 7. Full Transcript */}
+        {/* 7. Full Transcript Viewer — replaces the old <details> block */}
         {report.full_transcript_text && (
-          <details className="card mt-2 mb-6">
-            <summary className="cursor-pointer font-semibold text-sm">View Full Transcript</summary>
-            <pre className="text-xs text-text-muted whitespace-pre-wrap mt-4 max-h-96 overflow-y-auto bg-bg-input p-4 rounded leading-relaxed">
-              {report.full_transcript_text}
-            </pre>
-          </details>
+          <div className="mb-6">
+            <FullTranscriptViewer transcriptText={report.full_transcript_text} />
+          </div>
         )}
 
       </main>
